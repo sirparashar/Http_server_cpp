@@ -28,7 +28,7 @@ namespace http
 
         int startServer();
         void closeServer();
-        void acceptConnection(int &new_socket);
+        int acceptConnection(int &new_socket);
         string buildResponse();
         void sendResponse();
         void handleClient(int client_socket);

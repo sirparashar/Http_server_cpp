@@ -40,10 +40,10 @@ void sendRequest()
 
     std::string message = "Hello from client";
     send(sock, message.c_str(), message.size(), 0);
-    std::cout << "Message sent" << std::endl;
+    // std::cout << "Message sent" << std::endl;
 
     int valread = read(sock, buffer, BUFFER_SIZE);
-    std::cout << "Server response: " << buffer << std::endl;
+    std::cout << "Server response: " << std::endl;
 
     close(sock);
 }

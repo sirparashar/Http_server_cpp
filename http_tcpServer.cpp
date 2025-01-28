@@ -3,6 +3,11 @@
 #include <sys/socket.h>
 #include <sstream>
 #include <unistd.h>
+#include <thread>
+
+std::mutex gQueue_lock;
+std::condition_variable q_cond_var;
+std::queue<int> m_client_queue;
 
 const int BUFFER_SIZE = 30720;
 void log(const std::string &msg)
@@ -67,13 +72,13 @@ namespace http
     void tcpServer ::closeServer()
     {
         close(m_socket);
-        close(m_new_socket);
+        // close(m_new_socket);
         exit(0);
     }
 
     void tcpServer::startlistening()
     {
-        if (listen(m_socket, 4) < 0)
+        if (listen(m_socket, 50) < 0)
         {
             exitWithError("listen() failed");
         }
@@ -82,32 +87,56 @@ namespace http
         ss << "Listening on port " << m_port << std::endl;
         log(ss.str());
 
+        const int threads_count = 6;
+        std::vector<std::thread> threads;
+        for (int i = 0; i < threads_count; i++)
+        {
+            threads.push_back(std::thread(&tcpServer::workerThread, this, i));
+            std::cout << "working thread" << i << std::endl;
+        }
         int bytesReceived;
         while (true)
         {
-            log("waiting");
-            acceptConnection(m_new_socket);
-            char buffer[BUFFER_SIZE] = {0};
-            bytesReceived = read(m_new_socket, buffer, BUFFER_SIZE);
-            if (bytesReceived < 0)
-            {
-                exitWithError("read() failed");
-            }
-            ostringstream ss;
-            ss << "received Request";
-            log(ss.str());
+            // log("waiting");
+            int new_socket = acceptConnection(m_new_socket);
+            // char buffer[BUFFER_SIZE] = {0};
+            // bytesReceived = read(m_new_socket, buffer, BUFFER_SIZE);
+            // if (bytesReceived < 0)
+            // {
+            //     exitWithError("read() failed");
+            // }
+            // ostringstream ss;
+            // ss << "received Request";
+            // log(ss.str());
 
-            sendResponse();
-            // close(m_new_socket);
+            // sendResponse();
+            // // close(m_new_socket);
+            {
+                std::unique_lock<std::mutex> lock(gQueue_lock);
+                m_client_queue.push(new_socket);
+            }
+
+            q_cond_var.notify_one();
+        }
+        for (auto &thread : threads)
+        {
+            if (thread.joinable())
+            {
+                thread.join();
+            }
         }
     }
 
-    void tcpServer::acceptConnection(int &new_socket)
+    int tcpServer::acceptConnection(int &new_socket)
     {
         new_socket = accept(m_socket, (struct sockaddr *)&m_socket_address, &m_addr_length);
         if (new_socket < 0)
         {
             exitWithError("accept() failed");
+        }
+        else
+        {
+            return new_socket;
         }
     }
 
@@ -124,10 +153,30 @@ namespace http
         sendBytes = write(m_new_socket, m_serverMsg.c_str(), m_serverMsg.size());
         if (sendBytes < 0)
         {
+            std::ostringstream ss;
+            ss << "write() failed with error: " << strerror(errno);
+            log(ss.str());
             exitWithError("write() failed");
         }
         std::ostringstream ss;
         ss << "Response sent";
         log(ss.str());
+    }
+
+    void tcpServer::workerThread(int thread_id)
+    {
+        while (true)
+        {
+            int clientSocket;
+            {
+                std::unique_lock<std::mutex> lock(gQueue_lock);
+                q_cond_var.wait(lock, []
+                                { return !m_client_queue.empty(); });
+                std::cout << "thread " << thread_id << "woke up" << std::endl;
+                clientSocket = m_client_queue.front();
+                m_client_queue.pop();
+            }
+            handleClient(clientSocket);
+        }
     }
 }

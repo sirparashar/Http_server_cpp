@@ -1,6 +1,6 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -I /opt/homebrew/include -pthread
-LDFLAGS = -L /opt/homebrew/lib -pthread
+CXXFLAGS = -std=c++17 
+LDFLAGS = 
 SRC = server.cpp http_tcpServer.cpp
 OBJ = $(SRC:.cpp=.o)
 TARGET = server
